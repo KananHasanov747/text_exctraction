@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "text-extraction"
+version = "0.1.0"
+dependencies = ["pymupdf"]
+requires-python = ">=3.12"
+authors = [
+  {name = "KananHasanov747"},
+]
+description = "Assignment from Quasar79"
+readme = "README.md"
+
+
+[project.scripts]
+text-cli = "main:main"
+
