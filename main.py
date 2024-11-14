@@ -81,10 +81,10 @@ def toc_text_rec(tbl, text):
     start, id = None, 0
     keys = list(tbl.keys())
 
-    while id < len(keys):
+    while id <= len(keys):
         if start is not None:
             if "subsections" not in tbl[keys[id - 1]]:
-                subtext = text[start : text.find(keys[id])]
+                subtext = text[start : text.find(keys[id]) if id < len(keys) else None]
                 title = tbl[keys[id - 1]]["title"].split()
                 title = "".join(
                     [
@@ -98,21 +98,13 @@ def toc_text_rec(tbl, text):
                 tbl[keys[id - 1]]["length"] = len(subtext)
             else:
                 tbl[keys[id - 1]]["subsections"] = toc_text_rec(
-                    tbl[keys[id - 1]]["subsections"], text[start : text.find(keys[id])]
+                    tbl[keys[id - 1]]["subsections"],
+                    text[start : text.find(keys[id]) if id < len(keys) else None],
                 )
 
-        start, id = text.find(keys[id]) + len(keys[id]), id + 1
-
-    if start is not None:
-        subtext = text[start:]
-        title = tbl[keys[id - 1]]["title"].split()
-        title = "".join(
-            [rf"\s+{title[_]}" if _ > 0 else title[_] for _ in range(len(title))]
-        )
-        subtext = re.sub(rf"\s*{title}\s*", "", subtext, flags=re.IGNORECASE)
-
-        tbl[keys[id - 1]]["text"] = subtext
-        tbl[keys[id - 1]]["length"] = len(subtext)
+        if id < len(keys):
+            start = text.find(keys[id]) + len(keys[id])
+        id += 1
 
     return tbl
 
