@@ -62,9 +62,17 @@ def toc_sec_prep(tbl, pdf):  # toc sections preparation
     for page in pdf:
         text = page.get_text()
         if re.search(
-            rf"^(ГЛАВА\s\d+\s+{tbl[str(idx + 1)]['title'].replace(' ', r'\s+')})",
+            rf'''
+                ^(
+                ГЛАВА # checks if the text starts with "ГЛАВА"
+                \s # checks if there's a whitespace
+                \d+ # checks the number
+                \s+ # checks if there's a whitespace
+                {tbl[str(idx + 1)]['title'].replace(' ', r'\s+')} # checks the title's name
+                )
+            ''',
             text,
-            re.IGNORECASE | re.MULTILINE,
+            re.IGNORECASE | re.MULTILINE | re.VERBOSE,
         ):
             idx += 1
             sections[str(idx)] += text
@@ -74,7 +82,7 @@ def toc_sec_prep(tbl, pdf):  # toc sections preparation
             sections[str(idx)] += text
 
     for _ in sections.keys():
-        sections[_] = sections[_].strip().replace("\n \n \n", "")
+        sections[_] = sections[_].strip().replace(" \n \n \n", "")
     return sections
 
 
@@ -99,6 +107,7 @@ def toc_text_rec(tbl, text):
 
         if id < len(keys):
             start = text.find(keys[id]) + len(keys[id])
+            # start = re.search(keys[id], text).end()
         id += 1
 
     return tbl
