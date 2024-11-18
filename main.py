@@ -11,15 +11,10 @@ parser = argparse.ArgumentParser(
 parser.add_argument("filename")
 args = parser.parse_args()
 
-pattern = (
-    r"(\d[\d.]*)\s+(.*)"  # separates hierarchical levels (group(1)) and text (group(2))
-)
 
-
-def is_valid_chapter(chapter, dots):
-    chapter_number = chapter.group(1)
-    return chapter_number.count(".") == dots or (
-        chapter_number.count(".") == dots + 1 and chapter_number[-1] == "."
+def is_valid_chapter(level, dots):
+    return level.count(".") == dots or (
+        level.count(".") == dots + 1 and level[-1] == "."
     )
 
 
@@ -31,12 +26,22 @@ def toc_rec(lst, dots=1):
     start, id = None, None
 
     for idx, (lvl, title, page) in enumerate(lst):
-        chapter = re.search(pattern, title)
+        chapter = re.search(
+            r"""
+            (\d[\d.]*) # returns the 'hierarchical level' (group(1))
+            \s+ # checks the whitespace between 'level' and 'title'
+            (.*) # returns the 'title' (group(2))
+            """,
+            title,
+            re.VERBOSE,
+        )
 
-        if chapter and is_valid_chapter(chapter, dots):
+        if chapter and is_valid_chapter(chapter.group(1), dots):
             # Handles subsections for previous chapter if necessary
             if start is not None:
-                subsections = toc_rec(lst[start + 1 : idx], dots + 1)
+                subsections = toc_rec(
+                    lst[start + 1 : idx if idx < len(lst) else None], dots + 1
+                )
                 if subsections:
                     dct[id]["subsections"] = subsections
 
@@ -45,12 +50,6 @@ def toc_rec(lst, dots=1):
 
             # Stores the chapter information
             dct[id] = {"title": chapter.group(2)}
-
-    # Handles subsections for the last chapter
-    if start is not None:
-        subsections = toc_rec(lst[start + 1 :], dots + 1)
-        if subsections:
-            dct[id]["subsections"] = subsections
 
     return dct
 
@@ -62,8 +61,10 @@ def toc_sec_prep(tbl, pdf):  # toc sections preparation
     flag = False
     for page in pdf:
         text = page.get_text()
-        if "ГЛАВА" in text and tbl[str(idx + 1)]["title"].upper() in text.replace(
-            "\n", ""
+        if re.search(
+            rf"^(ГЛАВА\s\d+\s+{tbl[str(idx + 1)]['title'].replace(' ', r'\s+')})",
+            text,
+            re.IGNORECASE | re.MULTILINE,
         ):
             idx += 1
             sections[str(idx)] += text
@@ -85,13 +86,7 @@ def toc_text_rec(tbl, text):
         if start is not None:
             if "subsections" not in tbl[keys[id - 1]]:
                 subtext = text[start : text.find(keys[id]) if id < len(keys) else None]
-                title = tbl[keys[id - 1]]["title"].split()
-                title = "".join(
-                    [
-                        rf"\s+{title[_]}" if _ > 0 else title[_]
-                        for _ in range(len(title))
-                    ]
-                )
+                title = tbl[keys[id - 1]]["title"].replace(" ", r"\s+")
                 subtext = re.sub(rf"\s*{title}\s*", "", subtext, flags=re.IGNORECASE)
 
                 tbl[keys[id - 1]]["text"] = subtext
@@ -113,7 +108,6 @@ def toc_text(tbl, pdf):  # here, tbl is toc and pdf is doc
     sections = toc_sec_prep(tbl, pdf)  # '1': {}, '2': {}, ...
     for key in sections.keys():
         if "sections" not in tbl[key].keys():
-            # text = "".join(sections[key])
             text = sections[key].replace(f"ГЛАВА {key}", "")
             for _ in tbl[key]["title"].split():
                 text = text.replace(_.upper(), "")
@@ -130,26 +124,20 @@ def main():
     doc = pymupdf.open(args.filename)
     toc_raw = doc.get_toc()  # raw table of contents
     out_file = open("structure.json", "w")  # output file 'structure.json'
-    chapters = list(
-        filter(lambda x: "Глава" in x[1][1], enumerate(toc_raw))
-    )  # filters chapters for "Глава"
+    chapters = [
+        (_, x) for _, x in enumerate(toc_raw) if "Глава" in x[1]
+    ]  # filters chapters for "Глава" -> [(1, [1, 'Глава 1', 14]), (30, [1, 'Глава 2', 27]), ...]
 
     toc = {
-        re.findall(r"\d+", chapters[_][1][1])[0]: {
-            "title": toc_raw[chapters[_][0] + 1][1],
+        re.search(r"\d+", start[1][1]).group(): {
+            "title": toc_raw[start[0] + 1][1],
             **(
                 {"sections": toc_res}
-                if (
-                    toc_res := toc_rec(
-                        toc_raw[chapters[_][0] : chapters[_ + 1][0]]
-                        if _ < len(chapters) - 1
-                        else toc_raw[chapters[_][0] :]
-                    )
-                )
+                if (toc_res := toc_rec(toc_raw[start[0] : end[0]]))
                 else {}
             ),
         }
-        for _ in range(len(chapters))
+        for start, end in zip(chapters, chapters[1:] + [(None,)])
     }
 
     toc = toc_text(toc, doc)
